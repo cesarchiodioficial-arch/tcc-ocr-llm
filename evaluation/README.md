@@ -1,16 +1,34 @@
-# Avaliação experimental (Experimento A vs Experimento B)
+# Avaliação experimental (Experimento A × Experimento B)
 
-Este diretório apoia a metodologia experimental do TCC
+Apoia a metodologia experimental do TCC
 (ESPECIFICACAO.md §15 / Artigo §3.11–3.12).
 
 > O software **não inventa** resultados. Os valores de referência de cada nota
 > são definidos por você, pesquisador, antes do experimento.
 
+## Como as duas partes se encaixam (metodologia)
+
+O Artigo §3.12 descreve dois aspectos:
+
+1. **Comparar OCR isolado × OCR + LLM.**
+   Feito por `scripts/evaluate.py`, **offline**, usando o **mesmo texto OCR**
+   para as duas abordagens — assim o LLM é a única variável, o que torna a
+   comparação justa. Métricas: campos corretos, campos ausentes/incorretos,
+   taxa de acerto, taxa de documentos processados com sucesso, correções
+   necessárias (nº de campos divergentes da referência) e tempo.
+
+2. **Registrar as correções humanas do fluxo real.**
+   Você submete as notas pela API (`POST /api/v1/documents`), confere o
+   resultado (`GET`) e corrige/confirma (`PUT /api/v1/documents/{id}`). Cada
+   correção fica gravada em `validation.corrections` no MongoDB.
+   `scripts/corrections_report.py` agrega esses dados reais (total de
+   correções, por campo, documentos validados com/sem correção, distribuição
+   por status).
+
 ## Passo a passo
 
-1. Selecione o conjunto de notas fiscais do experimento (podem ser sintéticas ou
-   exemplos autorizados e não sensíveis) e coloque os arquivos em `samples/`
-   (ou em outra pasta que você indicar com `--dir`).
+1. Selecione o conjunto de notas fiscais (sintéticas ou exemplos autorizados e
+   não sensíveis) e coloque os arquivos em `samples/`.
 
 2. Copie o modelo e preencha os valores esperados de cada campo:
 
@@ -19,35 +37,43 @@ Este diretório apoia a metodologia experimental do TCC
    ```
 
    Colunas: `file_name,issuer_name,cnpj,issue_date,invoice_number,total_value`.
-   Deixe uma célula **vazia** quando a nota realmente não contém aquele campo —
-   campos sem referência não entram no cálculo da taxa de acerto.
+   Deixe a célula **vazia** quando a nota realmente não contém o campo — campos
+   sem referência não entram no cálculo da taxa de acerto.
 
-3. Rode a avaliação (precisa do Tesseract — use o container):
+3. Suba o ambiente (necessário para o `corrections_report` e para o Mongo):
 
    ```bash
-   docker compose run --rm app python -m scripts.evaluate \
-     --reference evaluation/reference_values.csv --dir samples
+   docker compose up --build     # em outro terminal, ou -d
    ```
 
-   Para o Experimento B (OCR + LLM) é necessário `LLM_API_KEY` válida no `.env`.
-   Sem chave, apenas o Experimento A (OCR isolado) produz números úteis.
+4. **Experimento A × B** (Tesseract roda no container `eval`):
 
-4. Os resultados são gravados em `evaluation/results/`:
-   - `results_<timestamp>.csv` — uma linha por documento e abordagem;
-   - `results_<timestamp>.md` — tabela consolidada com a taxa de acerto
-     (`campos_corretos / campos_avaliados * 100`) e o tempo médio.
+   ```bash
+   docker compose --profile eval run --rm eval \
+     -m scripts.evaluate --reference evaluation/reference_values.csv --dir samples
+   ```
 
-## Métricas coletadas
+   Para o Experimento B com LLM real, defina `LLM_PROVIDER=openai` e
+   `LLM_API_KEY` no `.env` antes. Sem chave, apenas o Experimento A
+   (OCR isolado) produz números úteis.
 
-- campos identificados corretamente;
-- campos ausentes / incorretos;
-- taxa de acerto (%);
-- tempo de processamento (ms) por documento;
-- comparação direta **A (OCR isolado)** vs **B (OCR + LLM)**.
+   Rode também com `OCR_BINARIZE=true` no `.env` para comparar o efeito da
+   binarização.
 
-As correções feitas na validação humana (via `PUT /api/v1/documents/{id}`) ficam
-registradas em `validation.corrections` de cada documento no MongoDB e podem ser
-exportadas para complementar a análise.
+5. **Fluxo real + correções humanas**: submeta cada nota pela API/Postman,
+   confira e corrija via `PUT`. Depois:
+
+   ```bash
+   docker compose --profile eval run --rm eval -m scripts.corrections_report
+   ```
+
+6. Resultados:
+   - `evaluation/results/results_<timestamp>.csv` / `.md` — Experimento A × B;
+   - saída do `corrections_report` — correções humanas reais.
 
 `evaluation/reference_values.csv` e `evaluation/results/` estão no `.gitignore`
 (podem conter dados reais).
+
+## Fórmula da taxa de acerto
+
+`taxa_de_acerto = (campos_corretos / campos_avaliados) * 100`

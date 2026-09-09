@@ -8,13 +8,12 @@ POST   /api/v1/documents/{id}/reprocess — reprocessamento
 
 from __future__ import annotations
 
-import logging
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from app.api.deps import get_llm_client, get_repository
-from app.api.errors import ProblemException
+from app.api.errors import ERROR_RESPONSES, ProblemException
 from app.config import get_settings
 from app.models.enums import DocumentStatus
 from app.models.schemas import DocumentOut, ExtractedFields, UpdateRequest
@@ -26,11 +25,9 @@ from app.repository.documents_repository import (
 from app.services import file_validation
 from app.services.document_factory import new_document
 from app.services.pipeline import process_document
-from app.services.validation_service import validate_extracted
+from app.services.validation_service import normalize_extracted, validate_extracted
 from app.storage import files as storage
 from app.utils.time_utils import now_iso
-
-log = logging.getLogger("app.api")
 
 router = APIRouter(prefix="/api/v1", tags=["documents"])
 
@@ -60,6 +57,7 @@ def _load(repo: DocumentsRepository, doc_id: str) -> dict:
     "/documents",
     status_code=201,
     response_model=DocumentOut,
+    responses=ERROR_RESPONSES,
     summary="Enviar documento e processar (síncrono)",
 )
 def create_document(
@@ -103,13 +101,22 @@ def create_document(
             503, "db_unavailable", "falha ao persistir o documento", stage="persistence"
         )
 
-    doc = process_document(doc, data, repo, llm_client=llm_client)
+    try:
+        doc = process_document(doc, data, repo, llm_client=llm_client)
+    except RepositoryUnavailableError:
+        raise ProblemException(
+            503,
+            "persistence_failed",
+            "o processamento não pôde ser persistido (MongoDB indisponível)",
+            stage="persistence",
+        )
     return _serialize(doc)
 
 
 @router.get(
     "/documents/{doc_id}",
     response_model=DocumentOut,
+    responses=ERROR_RESPONSES,
     summary="Consultar documento",
 )
 def get_document(
@@ -123,6 +130,7 @@ def get_document(
 @router.put(
     "/documents/{doc_id}",
     response_model=DocumentOut,
+    responses=ERROR_RESPONSES,
     summary="Correção / confirmação humana",
 )
 def update_document(
@@ -133,11 +141,23 @@ def update_document(
     _require_uuid(doc_id)
     doc = _load(repo, doc_id)
 
-    updates = (
+    raw_updates = (
         body.extracted_data.model_dump(exclude_unset=True) if body.extracted_data is not None else {}
     )
     current = doc["extracted_data"]
     corrections = doc["validation"].setdefault("corrections", [])
+
+    # Normaliza os valores recebidos para o formato interno (ISO, dígitos, número)
+    # antes de comparar/registrar — mesma representação usada pelo pipeline (P-09).
+    updates = raw_updates
+    if raw_updates:
+        try:
+            merged = normalize_extracted(
+                ExtractedFields.model_validate({**current, **raw_updates})
+            ).model_dump()
+        except Exception:  # noqa: BLE001
+            raise ProblemException(400, "invalid_data", "dados corrigidos não seguem o schema")
+        updates = {key: merged[key] for key in raw_updates}
 
     for field, new_value in updates.items():
         old_value = current.get(field)
@@ -164,7 +184,7 @@ def update_document(
     doc["validation"]["field_checks"] = {k: v.model_dump() for k, v in checks.items()}
 
     if body.validated:
-        if doc["status"] == DocumentStatus.FAILED and not updates:
+        if doc["status"] == DocumentStatus.FAILED and not corrections:
             raise ProblemException(
                 409,
                 "cannot_validate_failed",
@@ -173,7 +193,7 @@ def update_document(
         doc["validation"]["validated"] = True
         doc["validation"]["validated_by"] = "human"
         doc["validation"]["validated_at"] = now_iso()
-        doc["status"] = str(DocumentStatus.VALIDATED)
+        doc["status"] = DocumentStatus.VALIDATED
 
     try:
         repo.replace(doc)
@@ -188,6 +208,7 @@ def update_document(
 @router.post(
     "/documents/{doc_id}/reprocess",
     response_model=DocumentOut,
+    responses=ERROR_RESPONSES,
     summary="Reprocessar a partir do arquivo original",
 )
 def reprocess_document(
@@ -209,5 +230,13 @@ def reprocess_document(
     doc["validation"]["validated_by"] = None
     doc["validation"]["validated_at"] = None
 
-    doc = process_document(doc, data, repo, llm_client=llm_client)
+    try:
+        doc = process_document(doc, data, repo, llm_client=llm_client)
+    except RepositoryUnavailableError:
+        raise ProblemException(
+            503,
+            "persistence_failed",
+            "o reprocessamento não pôde ser persistido (MongoDB indisponível)",
+            stage="persistence",
+        )
     return _serialize(doc)

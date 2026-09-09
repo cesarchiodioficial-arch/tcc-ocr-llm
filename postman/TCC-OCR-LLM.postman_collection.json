@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "TCC — OCR + LLM (Notas Fiscais)",
-    "description": "Coleção da POC do TCC. Fluxo: health -> upload -> consulta -> correção/confirmação humana -> reprocessamento. Ajuste a variável base_url se necessário. O upload preenche automaticamente document_id.",
+    "description": "Coleção da POC do TCC. Fluxo: health -> upload -> consulta -> correção/confirmação humana -> reprocessamento. Ajuste a variável base_url se necessário. No request 'Upload documento', selecione o arquivo no campo 'file' (ex.: samples/nota-sintetica-001.png) — o Postman não versiona o caminho. O upload preenche automaticamente document_id.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

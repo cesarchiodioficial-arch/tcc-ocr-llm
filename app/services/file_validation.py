@@ -16,14 +16,6 @@ _JPEG_MAGIC = b"\xff\xd8\xff"
 _PDF_MAGIC = b"%PDF-"
 
 
-class UnsupportedFileError(Exception):
-    """Formato não suportado."""
-
-
-class EmptyFileError(Exception):
-    """Arquivo vazio."""
-
-
 class CorruptFileError(Exception):
     """Arquivo do tipo esperado mas ilegível."""
 
@@ -54,3 +46,7 @@ def verify_openable(mime: str, data: bytes) -> None:
     elif mime == "application/pdf":
         if not data.startswith(_PDF_MAGIC):
             raise CorruptFileError("PDF sem cabeçalho válido")
+        # Heurística barata para PDF truncado: todo PDF válido termina com o
+        # marcador %%EOF. A integridade completa é verificada no OCR.
+        if b"%%EOF" not in data[-1024:]:
+            raise CorruptFileError("PDF truncado ou incompleto (sem marcador %%EOF)")

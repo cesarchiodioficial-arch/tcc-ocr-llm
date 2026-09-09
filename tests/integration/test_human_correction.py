@@ -59,3 +59,38 @@ def test_put_unknown_id_404(client):
 
     response = client.put(f"/api/v1/documents/{uuid4()}", json={"validated": True})
     assert response.status_code == 404
+
+
+def test_human_correction_normalizes_to_internal_format(client, stub_ocr):
+    """Correção humana normaliza data→ISO e CNPJ→dígitos, igual ao pipeline (P-09)."""
+    created = _create(client)
+    doc_id = created["_id"]
+
+    response = client.put(
+        f"/api/v1/documents/{doc_id}",
+        json={
+            "extracted_data": {
+                "issue_date": "05/02/2026",
+                "cnpj": "11.222.333/0001-81",
+            }
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["extracted_data"]["issue_date"] == "2026-02-05"
+    assert body["extracted_data"]["cnpj"] == "11222333000181"
+    # o registro de correção guarda o valor já normalizado
+    corr = {c["field"]: c["new_value"] for c in body["validation"]["corrections"]}
+    assert corr["issue_date"] == "2026-02-05"
+    assert corr["cnpj"] == "11222333000181"
+
+
+def test_human_correction_keeps_invalid_value_flagged(client, stub_ocr):
+    created = _create(client)
+    doc_id = created["_id"]
+    body = client.put(
+        f"/api/v1/documents/{doc_id}",
+        json={"extracted_data": {"cnpj": "12345678000199"}},  # dígitos errados
+    ).json()
+    assert body["extracted_data"]["cnpj"] == "12345678000199"  # mantém o que o humano digitou
+    assert body["validation"]["field_checks"]["cnpj"]["valid"] is False

@@ -67,7 +67,10 @@ def _image_from_bytes(data: bytes) -> list[Image.Image]:
 
 
 def _ocr_one(image: Image.Image, settings) -> str:
-    processed = preprocess(image) if settings.ocr_preprocess else image.convert("L")
+    if settings.ocr_preprocess:
+        processed = preprocess(image, binarize=settings.ocr_binarize)
+    else:
+        processed = image.convert("L")
     try:
         return pytesseract.image_to_string(
             processed,

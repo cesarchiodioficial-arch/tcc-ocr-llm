@@ -22,7 +22,7 @@ def new_document(
         "mime_type": mime_type,
         "file_size_bytes": file_size_bytes,
         "source_pages": None,
-        "status": str(DocumentStatus.RECEIVED),
+        "status": DocumentStatus.RECEIVED,
         "ocr_text": None,
         "extracted_data": {field: None for field in ESSENTIAL_FIELDS},
         "validation": {

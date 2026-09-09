@@ -5,42 +5,42 @@
 
 ## Fase atual
 
-**POC implementada e commitada.** O commit `dfc5542` ("POC: extração de dados de
-notas fiscais com OCR + LLM") está em `origin/main` com a aplicação completa.
+**POC implementada + auditoria + correções da auditoria aplicadas.**
+
+- `dfc5542` — POC completa (em `origin/main`).
+- `ae6e41b` — rotina de continuidade entre sessões (branch `chore/session-continuity-docs`).
+- Correções da auditoria (P-01 … P-27) — aplicadas neste branch, aguardando commit/merge.
+
+## Correções da auditoria aplicadas
+
+| Grupo | Itens | Estado |
+|---|---|---|
+| Reprodutibilidade | P-01 (suíte hermética, ignora `.env`), P-17 (asserções semânticas) | ✅ verificado (mesmo resultado com/sem `.env`) |
+| Falhas | P-05 (Mongo mid-pipeline → 503, nunca 500), P-08 (reprocesso limpa dados antigos), P-15 (PDF truncado → 422) | ✅ com testes |
+| Correção humana | P-09 (normaliza data→ISO / CNPJ→dígitos no `PUT`) | ✅ com testes |
+| Experimento | P-02 (taxa de sucesso + correções necessárias no `evaluate.py`; novo `corrections_report.py`), P-03 (perfil `eval` no compose com bind-mount), P-06 (metodologia documentada), P-07 (baseline honesto) | ✅ com testes |
+| Contrato/API | P-10 (OpenAPI documenta 400/404/409/413/415/422/503 + envelope; /health 503) | ✅ com testes |
+| Testes | P-11 (PDF: 1 pág, multipág, corrompido; `source_pages`), P-18 (integração com JSON real do LLM) | ✅ |
+| Qualidade | P-12 (`OCR_BINARIZE` opt-in), P-13 (backoff no retry + 429), P-19 (`.gitignore` `.env.*`), P-20 (`LLM_EXCERPT_CHARS`), P-21 (código morto removido), P-24 (status padronizado), P-25/P-26 (README, `.env.example` `LLM_PROVIDER=fake`) | ✅ |
+| Config | P-04 (`.env` local do usuário com modelo inválido — corrigir manualmente + **rotacionar API key**) | ⚠️ ação do usuário |
+
+Suíte: **128 passed, 5 skipped** (`ocr_real`/`llm_real` pulam sem Tesseract/chave).
+Cobertura ~91% (utils, validation, schemas, preprocess = 100%).
 
 ## Próxima ação
 
-1. Rodar `docker compose up --build` em uma máquina com Docker e validar o fluxo
-   real (MongoDB + Tesseract + Poppler).
-2. Configurar `LLM_API_KEY` real em `.env` (nunca em `.env.example`) e validar a
-   integração OpenAI (`RUN_LLM_REAL=1 pytest -m llm_real`).
-3. Preencher `evaluation/reference_values.csv` e rodar `scripts/evaluate.py`
-   (Experimento A vs B) dentro do container.
+1. `docker compose up --build` numa máquina com Docker; validar health/upload/PUT/reprocess reais.
+2. `.env`: `LLM_PROVIDER=openai` + `LLM_API_KEY` + `LLM_MODEL` real → validar Experimento B.
+3. Preencher `evaluation/reference_values.csv` e rodar `docker compose --profile eval run --rm eval ...`.
+4. Merge do branch de correções.
 
-## Testes e resultados (última execução local — Python 3.14, venv)
+## Validações ainda NÃO executadas (ambiente sem Docker/Tesseract/OpenAI)
 
-- `pytest` → **106 passed, 2 skipped** (skips: `ocr_real`, `llm_real`), cobertura ~88%.
-- `utils/` e `validation_service.py`: 100% de cobertura.
-- App sobe via `uvicorn app.main:app`; `/health`, `/openapi.json`, `/docs` respondem.
-- Fluxo ponta a ponta validado com `mongomock` + `FakeLLMClient`:
-  upload → OCR (stub) → LLM (fake) → validação → `VALIDATION_PENDING` →
-  correção humana (`corrections[]`, `VALIDATED`) → reprocessamento (`reprocess_count`).
+Docker build/up · Tesseract real · MongoDB real · OpenAI real · Postman com app no ar ·
+experimento real. Tudo o mais foi verificado com `mongomock` + `FakeLLMClient` + OCR stub.
 
-## Pendências / limitações (ver README §10)
+## Decisões permanentes
 
-- Docker não executado no ambiente de desenvolvimento (sem Docker) — arquivos
-  validados sinteticamente (`docker-compose.yml` parseia; `Dockerfile` padrão).
-- OCR real do Tesseract e LLM real da OpenAI ainda não validados fim a fim.
-- `evaluation`: baseline (Experimento A) coberto por teste unitário; execução com
-  Tesseract real pendente.
-
-## Decisões (permanentes — ver `CLAUDE.md` §19 / `ESPECIFICACAO.md` §22)
-
-Processamento síncrono · FastAPI + Uvicorn · upload 10 MB · pdf2image + Poppler ·
-Experimento A = baseline OCR-only (regex) · LLM: OpenAI, `LLM_MODEL` por env ·
-API key só em variável de ambiente.
-
-## Git
-
-- Branch principal: `main` (contém a POC completa).
-- `origin`: `github.com/cesarchiodioficial-arch/tcc-ocr-llm`.
+Ver `CLAUDE.md` §19 / `ESPECIFICACAO.md` §22. Síncrono · FastAPI+Uvicorn · upload 10 MB ·
+pdf2image+Poppler · Experimento A = baseline OCR-only · LLM OpenAI, `LLM_MODEL` por env ·
+API key só em variável de ambiente · uso mono-usuário.

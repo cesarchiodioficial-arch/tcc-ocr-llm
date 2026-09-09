@@ -50,3 +50,28 @@ def test_reprocess_missing_original_returns_409(client, stub_ocr, repo):
 def test_reprocess_unknown_id_404(client):
     response = client.post(f"/api/v1/documents/{uuid4()}/reprocess")
     assert response.status_code == 404
+
+
+def test_reprocess_failure_clears_previous_results(client, stub_ocr, monkeypatch):
+    """Reprocesso que falha não pode exibir dados do processamento anterior (P-08)."""
+    created = _create(client)
+    doc_id = created["_id"]
+    assert created["extracted_data"]["cnpj"] == "12345678000195"  # run 1 ok
+
+    # agora o OCR passa a falhar
+    monkeypatch.setattr(
+        "app.services.pipeline.ocr_service.run_ocr",
+        lambda data, mime: ("", 1, 2),
+    )
+    body = client.post(f"/api/v1/documents/{doc_id}/reprocess").json()
+
+    assert body["status"] == "FAILED"
+    assert body["error"]["stage"] == "ocr"
+    # nada do run anterior deve sobrar
+    assert body["extracted_data"] == {
+        "issuer_name": None, "cnpj": None, "issue_date": None,
+        "invoice_number": None, "total_value": None,
+    }
+    assert body["llm"] is None
+    assert body["ocr_text"] in (None, "")
+    assert body["validation"]["field_checks"] == {}

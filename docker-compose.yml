@@ -5,7 +5,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      APP_ENV: production
       LOG_LEVEL: INFO
       MAX_UPLOAD_MB: "10"
       MONGO_URI: mongodb://mongo:27017
@@ -14,8 +13,9 @@ services:
       UPLOAD_DIR: /data/uploads
       OCR_LANG: por
       OCR_PREPROCESS: "true"
+      OCR_BINARIZE: ${OCR_BINARIZE:-false}
       # LLM — valores reais vêm do .env (NUNCA versionar o .env)
-      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
       LLM_API_KEY: ${LLM_API_KEY:-changeme}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
@@ -33,6 +33,36 @@ services:
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped
+
+  # Serviço de avaliação experimental. Não sobe com o `docker compose up`
+  # normal — só com o perfil `eval`. Monta `evaluation/` e `samples/` do host.
+  #
+  #   # Experimento A × B:
+  #   docker compose --profile eval run --rm eval \
+  #     -m scripts.evaluate --reference evaluation/reference_values.csv --dir samples
+  #
+  #   # Correções humanas reais (lê o MongoDB):
+  #   docker compose --profile eval run --rm eval -m scripts.corrections_report
+  eval:
+    build: .
+    profiles: ["eval"]
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB: tcc_ocr_llm
+      MONGO_COLLECTION: documents
+      OCR_LANG: por
+      OCR_PREPROCESS: "true"
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      LLM_API_KEY: ${LLM_API_KEY:-changeme}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+    volumes:
+      - ./evaluation:/app/evaluation
+      - ./samples:/app/samples
+    depends_on:
+      - mongo
+    entrypoint: ["python"]
+    command: ["-m", "scripts.evaluate", "--reference", "evaluation/reference_values.csv", "--dir", "samples"]
 
 volumes:
   mongo_data:
