@@ -232,3 +232,16 @@ As decisões abaixo estão aprovadas e não devem ser novamente questionadas dur
 - API key exclusivamente por variável de ambiente.
 
 O agente não deve voltar a propor Flask, processamento assíncrono, PyMuPDF ou outros modelos de arquitetura salvo quando surgir um erro técnico concreto que impeça a execução da solução aprovada.
+
+## Gestão de contexto e continuidade
+
+Quando a sessão estiver próxima do limite de contexto ou antes de uma mudança planejada de sessão:
+
+1. atualizar `docs/SESSION_STATE.md`;
+2. registrar fase atual e próxima ação;
+3. registrar testes e resultados;
+4. registrar problemas e decisões;
+5. nunca depender exclusivamente do histórico da conversa para continuidade.
+
+Em uma nova sessão, ler `CLAUDE.md`, `ESPECIFICACAO.md`,
+`PLANO_IMPLEMENTACAO.md` e `docs/SESSION_STATE.md` antes de alterar o código.
