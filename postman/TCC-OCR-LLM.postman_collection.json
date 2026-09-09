@@ -1,0 +1,122 @@
+{
+  "info": {
+    "name": "TCC — OCR + LLM (Notas Fiscais)",
+    "description": "Coleção da POC do TCC. Fluxo: health -> upload -> consulta -> correção/confirmação humana -> reprocessamento. Ajuste a variável base_url se necessário. O upload preenche automaticamente document_id.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000", "type": "string" },
+    { "key": "document_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] }
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "GET", "url": { "raw": "{{base_url}}/health" } },
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"status\": \"ok\",\n  \"mongo\": \"ok\",\n  \"version\": \"0.1.0\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Upload documento",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (body && body._id) {",
+              "  pm.collectionVariables.set('document_id', body._id);",
+              "  console.log('document_id =', body._id);",
+              "}",
+              "pm.test('status 201', () => pm.response.code === 201);",
+              "pm.test('tem _id', () => pm.expect(body).to.have.property('_id'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "../samples/nota-sintetica-001.png",
+              "description": "Nota fiscal em PDF, PNG ou JPG/JPEG"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/documents",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "documents"]
+        }
+      }
+    },
+    {
+      "name": "Consultar documento",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/documents/{{document_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "documents", "{{document_id}}"]
+        }
+      }
+    },
+    {
+      "name": "Correção humana (PUT)",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"extracted_data\": {\n    \"issuer_name\": \"POSTO AVENIDA LTDA\",\n    \"total_value\": 245.90\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/documents/{{document_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "documents", "{{document_id}}"]
+        }
+      }
+    },
+    {
+      "name": "Confirmação humana (PUT validated=true)",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"validated\": true\n}" },
+        "url": {
+          "raw": "{{base_url}}/api/v1/documents/{{document_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "documents", "{{document_id}}"]
+        }
+      }
+    },
+    {
+      "name": "Reprocessar documento",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{}" },
+        "url": {
+          "raw": "{{base_url}}/api/v1/documents/{{document_id}}/reprocess",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "documents", "{{document_id}}", "reprocess"]
+        }
+      }
+    }
+  ]
+}

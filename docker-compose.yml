@@ -1,0 +1,39 @@
+# POC TCC — sobe a aplicação + MongoDB com:  docker compose up --build
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: production
+      LOG_LEVEL: INFO
+      MAX_UPLOAD_MB: "10"
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB: tcc_ocr_llm
+      MONGO_COLLECTION: documents
+      UPLOAD_DIR: /data/uploads
+      OCR_LANG: por
+      OCR_PREPROCESS: "true"
+      # LLM — valores reais vêm do .env (NUNCA versionar o .env)
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_API_KEY: ${LLM_API_KEY:-changeme}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-2}
+    volumes:
+      - uploads_data:/data/uploads
+    depends_on:
+      mongo:
+        condition: service_started
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+volumes:
+  mongo_data:
+  uploads_data:

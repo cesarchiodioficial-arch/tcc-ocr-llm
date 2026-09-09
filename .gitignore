@@ -1,0 +1,33 @@
+# Segredos / ambiente
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.cache/
+
+# Dados da POC — nunca versionar notas fiscais reais nem uploads
+uploads/*
+!uploads/.gitkeep
+samples/*
+!samples/.gitkeep
+!samples/README.md
+!samples/nota-sintetica-001.png
+
+# Referência experimental preenchida pelo pesquisador (pode conter dados reais)
+evaluation/reference_values.csv
+evaluation/results/
+
+# SO / editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
