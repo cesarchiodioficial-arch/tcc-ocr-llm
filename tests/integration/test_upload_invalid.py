@@ -35,6 +35,17 @@ def test_corrupt_image(client):
     assert response.json()["error"]["code"] == "corrupt_file"
 
 
+def test_truncated_pdf_rejected(client):
+    # cabeçalho PDF válido mas sem marcador %%EOF → truncado
+    truncated = b"%PDF-1.4\n" + b"conteudo parcial sem trailer " * 5
+    response = client.post(
+        "/api/v1/documents",
+        files={"file": ("nota.pdf", truncated, "application/pdf")},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "corrupt_file"
+
+
 def test_file_too_large(client, monkeypatch):
     monkeypatch.setenv("MAX_UPLOAD_MB", "0")
     from app.config import get_settings

@@ -60,6 +60,13 @@ class DocumentsRepository:
             raise DocumentNotFoundError(doc_id)
         return found
 
+    def iter_all(self, projection: dict | None = None):
+        """Itera todos os documentos da collection (uso: relatórios de avaliação)."""
+        try:
+            yield from self._collection.find({}, projection)
+        except PyMongoError as exc:
+            raise RepositoryUnavailableError(str(exc)) from exc
+
     def replace(self, doc: dict) -> dict:
         doc["updated_at"] = now_iso()
         try:

@@ -966,3 +966,41 @@ LLM_MAX_RETRIES=2
 **Dev (`requirements-dev.txt`):** `pytest`, `pytest-cov`, `mongomock`.
 
 **Sistema (Dockerfile / `apt`):** `tesseract-ocr`, `tesseract-ocr-por`, `poppler-utils`.
+
+---
+
+## Apêndice — Ajustes pós-auditoria
+
+Após a implementação, uma auditoria independente identificou pontos de melhoria.
+As correções aplicadas (mantendo o escopo e a simplicidade da POC):
+
+- **Testes herméticos** — a suíte fixa todas as variáveis de ambiente que usa e
+  ignora qualquer `.env`; resultado idêntico com ou sem `.env`.
+- **Falha de MongoDB no meio do pipeline** — passa a responder **HTTP 503** com
+  envelope (nunca 500); nada é reportado como persistido sem gravação
+  (ESPECIFICACAO §13 / CLAUDE §10).
+- **Reprocessamento** — limpa `ocr_text`/`extracted_data`/`field_checks`/`llm`
+  do run anterior antes de recomeçar; um reprocesso que falha não exibe dados
+  antigos.
+- **Correção humana (`PUT`)** — normaliza `issue_date`→ISO e `cnpj`→dígitos,
+  igual ao pipeline (ESPECIFICACAO §8).
+- **Avaliação experimental** — `scripts/evaluate.py` passa a reportar também
+  "taxa de documentos processados com sucesso" e "correções necessárias";
+  novo `scripts/corrections_report.py` agrega as correções humanas REAIS do
+  MongoDB; perfil `eval` no `docker-compose.yml` com bind-mount de
+  `evaluation/` e `samples/` permite rodar o experimento pelo caminho
+  documentado. Baseline do Experimento A tornado mais honesto (CNPJ válido,
+  emissor próximo ao CNPJ, total rotulado).
+- **Contrato** — OpenAPI passa a documentar todas as respostas de erro
+  (400/404/409/413/415/422/503) e o envelope; `/health` documenta o 503.
+- **PDF** — testes reais de PDF (1 página, multipágina, corrompido); PDF
+  truncado (sem `%%EOF`) rejeitado com 422 no upload.
+- **OCR** — binarização virou opção `OCR_BINARIZE` (padrão `false`), pois o
+  limiar fixo podia degradar documentos de boa qualidade.
+- **LLM** — backoff exponencial entre tentativas; tratamento explícito de 429;
+  nº de tentativas registrado no documento mesmo em falha; trecho da resposta
+  guardado configurável (`LLM_EXCERPT_CHARS`, padrão 600).
+- **Config / docs** — `.env.example` com `LLM_PROVIDER=fake` para a primeira
+  execução e aviso sobre usar um modelo OpenAI real; `.gitignore` cobre
+  `.env.*`; README revisado (comandos, limitações, premissa mono-usuário,
+  `total_value` como `float`).

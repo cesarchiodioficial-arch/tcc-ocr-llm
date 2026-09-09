@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     )
 
     # App
-    app_env: str = "development"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     log_level: str = "INFO"
@@ -37,6 +36,7 @@ class Settings(BaseSettings):
     # OCR
     ocr_lang: str = "por"
     ocr_preprocess: bool = True
+    ocr_binarize: bool = False
     ocr_min_chars: int = 20
     ocr_timeout_seconds: int = 60
     pdf_dpi: int = 300
@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_timeout_seconds: int = 30
     llm_max_retries: int = 2
+    llm_retry_backoff_seconds: float = 0.5
+    llm_excerpt_chars: int = 600
 
     @property
     def max_upload_bytes(self) -> int:
@@ -60,7 +62,12 @@ class Settings(BaseSettings):
 
     @property
     def llm_api_key_configured(self) -> bool:
-        return bool(self.llm_api_key) and self.llm_api_key.lower() not in {"changeme", "", "none"}
+        return bool(self.llm_api_key) and self.llm_api_key.lower() not in {
+            "changeme",
+            "",
+            "none",
+            "test-key-not-real",
+        }
 
 
 @lru_cache

@@ -41,6 +41,9 @@ class OpenAIClient:
 
         if response.status_code in (401, 403):
             raise LLMAuthError(f"credencial inválida (HTTP {response.status_code})")
+        if response.status_code == 429:
+            retry_after = response.headers.get("retry-after", "?")
+            raise LLMError(f"rate limit (HTTP 429, retry-after={retry_after})")
         if response.status_code >= 400:
             raise LLMError(f"HTTP {response.status_code}: {response.text[:200]}")
 

@@ -59,3 +59,29 @@ def make_blank_png() -> bytes:
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+def _render_invoice_image(lines: list[str], size: tuple[int, int] = (900, 500)) -> Image.Image:
+    image = Image.new("RGB", size, "white")
+    draw = ImageDraw.Draw(image)
+    y = 30
+    for line in lines:
+        draw.text((40, y), line, fill="black")
+        y += 45
+    return image
+
+
+def make_invoice_pdf(pages: int = 1) -> bytes:
+    """Nota fiscal sintética em PDF (1+ páginas), via Pillow (sem dependências extras)."""
+    base_lines = [
+        "POSTO AVENIDA LTDA",
+        "CNPJ: 12.345.678/0001-95",
+        "NOTA FISCAL No 12345",
+        "Data de emissao: 31/01/2026",
+        "VALOR TOTAL R$ 245,90",
+    ]
+    first = _render_invoice_image(base_lines)
+    extra = [_render_invoice_image([f"Pagina {i + 2} - continuacao"]) for i in range(pages - 1)]
+    buffer = io.BytesIO()
+    first.save(buffer, format="PDF", save_all=True, append_images=extra)
+    return buffer.getvalue()

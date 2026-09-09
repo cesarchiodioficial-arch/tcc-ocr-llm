@@ -51,6 +51,11 @@ Formato de saída (exatamente estas chaves, nesta ordem):
 class LLMExtractionError(Exception):
     """Não foi possível obter uma resposta válida do LLM."""
 
+    def __init__(self, message: str, *, attempts: int = 0, provider: str | None = None) -> None:
+        super().__init__(message)
+        self.attempts = attempts
+        self.provider = provider
+
 
 def build_user_prompt(ocr_text: str) -> str:
     return (
@@ -122,15 +127,23 @@ def extract_fields(
     """
     settings = get_settings()
     client = client or get_client()
+    provider = getattr(client, "provider", settings.llm_provider)
     user_prompt = build_user_prompt(ocr_text)
     last_error: Exception | None = None
     max_attempts = settings.llm_max_retries + 1
+    attempt = 0
 
     for attempt in range(1, max_attempts + 1):
+        if attempt > 1 and settings.llm_retry_backoff_seconds > 0:
+            # backoff exponencial simples entre tentativas (ajuda em 429/5xx)
+            time.sleep(settings.llm_retry_backoff_seconds * (2 ** (attempt - 2)))
+
         try:
             result = client.complete(SYSTEM_PROMPT, user_prompt, timeout=settings.llm_timeout_seconds)
         except LLMAuthError as exc:
-            raise LLMExtractionError(f"credencial de LLM inválida: {exc}") from exc
+            raise LLMExtractionError(
+                f"credencial de LLM inválida: {exc}", attempts=attempt, provider=provider
+            ) from exc
         except LLMError as exc:
             last_error = exc
             log.warning("LLM tentativa %s falhou (comunicação): %s", attempt, exc)
@@ -148,10 +161,12 @@ def extract_fields(
             "provider": result.provider,
             "model": result.model,
             "attempts": attempt,
-            "raw_response_excerpt": result.text[:2000],
+            "raw_response_excerpt": result.text[: settings.llm_excerpt_chars] or None,
         }
         return data, meta
 
     raise LLMExtractionError(
-        f"resposta inválida do LLM após {max_attempts} tentativa(s): {last_error}"
+        f"resposta inválida do LLM após {max_attempts} tentativa(s): {last_error}",
+        attempts=attempt,
+        provider=provider,
     )

@@ -1,5 +1,6 @@
 import pytest
 
+from app.config import get_settings
 from app.services.llm.fake_client import FakeLLMClient
 from app.services.llm_service import LLMExtractionError, extract_fields
 
@@ -60,8 +61,19 @@ def test_retry_then_success_counts_attempts():
 
 
 def test_invalid_forever_raises_after_max_retries():
+    max_attempts = get_settings().llm_max_retries + 1
     client = FakeLLMClient(VALID, fail_times=99)
-    with pytest.raises(LLMExtractionError):
+    with pytest.raises(LLMExtractionError) as exc_info:
         extract_fields("t", client=client)
-    # LLM_MAX_RETRIES=2 → 3 tentativas
-    assert client.calls == 3
+    assert client.calls == max_attempts
+    assert exc_info.value.attempts == max_attempts
+    assert exc_info.value.provider == "fake"
+
+
+def test_communication_error_is_retried_then_fails():
+    max_attempts = get_settings().llm_max_retries + 1
+    client = FakeLLMClient(VALID, raise_times=99)
+    with pytest.raises(LLMExtractionError) as exc_info:
+        extract_fields("t", client=client)
+    assert client.calls == max_attempts
+    assert exc_info.value.attempts == max_attempts

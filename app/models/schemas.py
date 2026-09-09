@@ -114,7 +114,3 @@ class DocumentOut(BaseModel):
     error: ErrorInfo | None = None
     created_at: str
     updated_at: str
-
-
-class ErrorEnvelope(BaseModel):
-    error: dict[str, Any]
